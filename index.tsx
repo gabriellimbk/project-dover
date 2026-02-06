@@ -59,7 +59,7 @@ interface AllocationRow {
 interface Submission {
   id: string;
   timestamp: number;
-  userInfo: { name: string; class: string; tutor: string };
+  userInfo: { name: string; tutor: string };
   groupRole: string;
   partAResponse: string;
   allocation: AllocationRow[];
@@ -162,7 +162,7 @@ const DoverForestApp = () => {
   const [activeSection, setActiveSection] = useState<Section>('Intro');
   
   // Student States
-  const [userInfo, setUserInfo] = useState({ name: '', class: '', tutor: '' });
+  const [userInfo, setUserInfo] = useState({ name: '', tutor: '' });
   const [groupRole, setGroupRole] = useState('');
   const [partAResponse, setPartAResponse] = useState('');
   const [allocation, setAllocation] = useState<AllocationRow[]>(INITIAL_ALLOCATION);
@@ -292,8 +292,8 @@ const DoverForestApp = () => {
   };
 
   const saveSubmission = () => {
-    if (!userInfo.name || !userInfo.class || !userInfo.tutor) {
-      alert("Please complete your profile (Name, Class, and Tutor) before submitting.");
+    if (!userInfo.name || !userInfo.tutor) {
+      alert("Please complete your profile (Name and Tutor) before submitting.");
       return;
     }
     const newSubmission: Submission = {
@@ -422,7 +422,7 @@ const DoverForestApp = () => {
                   >
                   <div>
                     <p className="font-bold text-sm truncate max-w-[140px]">{sub.userInfo.name || 'Anonymous'}</p>
-                    <p className={`text-[10px] font-black uppercase tracking-widest ${selectedSubmission?.id === sub.id ? 'text-indigo-200' : 'text-slate-400'}`}>{sub.userInfo.class || 'No Class'}</p>
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${selectedSubmission?.id === sub.id ? 'text-indigo-200' : 'text-slate-400'}`}>{sub.userInfo.tutor || 'No Tutor'}</p>
                   </div>
                   <ChevronRight className={`w-4 h-4 transition-transform ${selectedSubmission?.id === sub.id ? 'translate-x-1' : 'opacity-0 group-hover:opacity-100'}`} />
                 </button>
@@ -440,7 +440,6 @@ const DoverForestApp = () => {
               <div>
                 <h2 className="text-3xl font-black text-slate-900">{selectedSubmission.userInfo.name}</h2>
                 <div className="flex gap-4 mt-2">
-                  <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-black uppercase tracking-widest">{selectedSubmission.userInfo.class}</span>
                   <span className="px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-xs font-black uppercase tracking-widest">Tutor: {selectedSubmission.userInfo.tutor || 'N/A'}</span>
                   <span className="px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-xs font-black uppercase tracking-widest">Role: {selectedSubmission.groupRole || 'N/A'}</span>
                 </div>
@@ -551,14 +550,10 @@ const DoverForestApp = () => {
       )}
 
       <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-200">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Student Name</label>
             <input type="text" value={userInfo.name} onChange={e => setUserInfo({...userInfo, name: e.target.value})} className="w-full border-b-2 border-slate-100 focus:border-indigo-600 transition-all py-2 text-lg font-bold bg-transparent outline-none" placeholder="Name" />
-          </div>
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Class</label>
-            <input type="text" value={userInfo.class} onChange={e => setUserInfo({...userInfo, class: e.target.value})} className="w-full border-b-2 border-slate-100 focus:border-indigo-600 transition-all py-2 text-lg font-bold bg-transparent outline-none" placeholder="Class" />
           </div>
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Tutor</label>
