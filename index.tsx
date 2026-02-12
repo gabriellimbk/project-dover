@@ -142,8 +142,6 @@ const STAKEHOLDER_BRIEFS: Record<string, {
 
 // Local map infographic asset
 const MAP_URL = new URL('./Dover image.jpeg', import.meta.url).toString();
-const TEACHER_EMAIL_DOMAIN = "@ri.edu.sg";
-
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
@@ -200,13 +198,6 @@ const DoverForestApp = () => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [imageError, setImageError] = useState(false);
-  const [teacherAuthed, setTeacherAuthed] = useState(false);
-  const [showTeacherAuth, setShowTeacherAuth] = useState(false);
-  const [teacherEmail, setTeacherEmail] = useState("");
-  const [teacherOtp, setTeacherOtp] = useState("");
-  const [teacherAuthStep, setTeacherAuthStep] = useState<'email' | 'otp'>('email');
-  const [teacherAuthLoading, setTeacherAuthLoading] = useState(false);
-  const [teacherAuthError, setTeacherAuthError] = useState("");
   const [selectedTutorFilter, setSelectedTutorFilter] = useState("All");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -239,90 +230,12 @@ const DoverForestApp = () => {
   };
 
   useEffect(() => {
-    if (!supabase) return;
-    let isActive = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!isActive) return;
-      const email = data.session?.user?.email || "";
-      setTeacherAuthed(email.endsWith(TEACHER_EMAIL_DOMAIN));
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      const email = session?.user?.email || "";
-      setTeacherAuthed(email.endsWith(TEACHER_EMAIL_DOMAIN));
-    });
-    return () => {
-      isActive = false;
-      listener.subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!teacherAuthed) return;
+    if (viewMode !== "teacher") return;
     fetchSubmissions().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       alert(`Unable to load submissions. ${message}`);
     });
-  }, [teacherAuthed]);
-
-  const openTeacherAuth = () => {
-    setTeacherAuthError("");
-    setTeacherAuthStep("email");
-    setShowTeacherAuth(true);
-  };
-
-  const sendTeacherOtp = async () => {
-    if (!supabase) {
-      setTeacherAuthError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-      return;
-    }
-    const email = teacherEmail.trim().toLowerCase();
-    if (!email.endsWith(TEACHER_EMAIL_DOMAIN)) {
-      setTeacherAuthError(`Email must end with ${TEACHER_EMAIL_DOMAIN}.`);
-      return;
-    }
-    setTeacherAuthLoading(true);
-    setTeacherAuthError("");
-    try {
-      const { error } = await supabase.auth.signInWithOtp({ email });
-      if (error) throw error;
-      setTeacherAuthStep("otp");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setTeacherAuthError(message);
-    } finally {
-      setTeacherAuthLoading(false);
-    }
-  };
-
-  const verifyTeacherOtp = async () => {
-    if (!supabase) {
-      setTeacherAuthError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-      return;
-    }
-    const email = teacherEmail.trim().toLowerCase();
-    const token = teacherOtp.trim();
-    if (token.length !== 6) {
-      setTeacherAuthError("Enter the 6 digit OTP.");
-      return;
-    }
-    setTeacherAuthLoading(true);
-    setTeacherAuthError("");
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token,
-        type: "email"
-      });
-      if (error) throw error;
-      setShowTeacherAuth(false);
-      setViewMode("teacher");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setTeacherAuthError(message);
-    } finally {
-      setTeacherAuthLoading(false);
-    }
-  };
+  }, [viewMode]);
 
   const saveSubmission = async () => {
     if (!supabase) {
@@ -348,7 +261,7 @@ const DoverForestApp = () => {
       const { error } = await supabase.from(SUBMISSIONS_TABLE).insert({ data: newSubmission });
       if (error) throw error;
       alert("Response submitted successfully!");
-      if (teacherAuthed) {
+      if (viewMode === "teacher") {
         await fetchSubmissions();
       }
     } catch (err) {
@@ -1015,88 +928,6 @@ const DoverForestApp = () => {
 
   return (
     <div className="min-h-screen bg-[#fcfcfd] flex flex-col font-sans text-slate-900">
-      {showTeacherAuth && (
-        <div className="fixed inset-0 z-[110] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200">
-            <div className="p-8 border-b border-slate-100 flex items-start justify-between">
-              <div>
-                <h3 className="text-xl font-black text-slate-800">Teacher Access</h3>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Email OTP Sign-In</p>
-              </div>
-              <button onClick={() => setShowTeacherAuth(false)} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-600 transition-colors"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-8 space-y-6">
-              <p className="text-sm text-slate-600 font-medium">Use your school email ending with {TEACHER_EMAIL_DOMAIN} to receive a 6 digit OTP.</p>
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</label>
-                <input
-                  type="email"
-                  value={teacherEmail}
-                  onChange={e => setTeacherEmail(e.target.value)}
-                  placeholder={`name${TEACHER_EMAIL_DOMAIN}`}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-slate-100 focus:border-indigo-600 transition-all text-sm font-medium"
-                />
-              </div>
-
-              {teacherAuthStep === "otp" && (
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">6 Digit OTP</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    value={teacherOtp}
-                    onChange={e => setTeacherOtp(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="123456"
-                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-100 focus:border-indigo-600 transition-all text-sm font-medium tracking-widest"
-                  />
-                </div>
-              )}
-
-              {teacherAuthError && (
-                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-700 font-bold">{teacherAuthError}</div>
-              )}
-            </div>
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-              <button
-                onClick={() => setShowTeacherAuth(false)}
-                className="text-slate-500 font-bold text-xs hover:text-slate-700"
-              >
-                Cancel
-              </button>
-              <div className="flex gap-3">
-                {teacherAuthStep === "otp" && (
-                  <button
-                    onClick={sendTeacherOtp}
-                    disabled={teacherAuthLoading}
-                    className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all"
-                  >
-                    Resend OTP
-                  </button>
-                )}
-                {teacherAuthStep === "email" ? (
-                  <button
-                    onClick={sendTeacherOtp}
-                    disabled={teacherAuthLoading}
-                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all"
-                  >
-                    {teacherAuthLoading ? "Sending..." : "Send OTP"}
-                  </button>
-                ) : (
-                  <button
-                    onClick={verifyTeacherOtp}
-                    disabled={teacherAuthLoading}
-                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all"
-                  >
-                    {teacherAuthLoading ? "Verifying..." : "Verify & Continue"}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       <header className="bg-white border-b border-slate-100 p-6 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-4">
@@ -1117,15 +948,7 @@ const DoverForestApp = () => {
             )}
             
             <button 
-              onClick={() => {
-                if (viewMode === 'teacher') {
-                  setViewMode('student');
-                } else if (teacherAuthed) {
-                  setViewMode('teacher');
-                } else {
-                  openTeacherAuth();
-                }
-              }}
+              onClick={() => setViewMode(viewMode === "teacher" ? "student" : "teacher")}
               className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 font-bold text-xs text-slate-500 hover:bg-slate-50 transition-all"
             >
               {viewMode === 'student' ? <Settings className="w-4 h-4" /> : <User className="w-4 h-4" />}
