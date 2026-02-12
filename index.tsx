@@ -75,6 +75,12 @@ interface Submission {
   foodForThought: Record<string, string>;
 }
 
+interface SubmissionRow {
+  id: string;
+  created_at: string;
+  data: Omit<Submission, 'id'>;
+}
+
 const INITIAL_ALLOCATION: AllocationRow[] = [
   { use: 'Housing and civic infrastructure (e.g. Schools, playgrounds)', percentage: 0, reason: '' },
   { use: 'Commercial and industrial infrastructure (e.g. Shopping centres, semiconductor manufacturing)', percentage: 0, reason: '' },
@@ -141,6 +147,7 @@ const TEACHER_EMAIL_DOMAIN = "@ri.edu.sg";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+const SUBMISSIONS_TABLE = "ECONS_DOVER_WORKSHEET_SUBMISSION";
 
 // --- Sub-components ---
 
@@ -207,11 +214,29 @@ const DoverForestApp = () => {
   const totalPercentage = allocation.reduce((acc, curr) => acc + curr.percentage, 0);
   const isReadyForPartC = totalPercentage === 100 && !!groupRole;
 
-  // Persistence for teacher view (using localStorage for this demo)
-  useEffect(() => {
-    const saved = localStorage.getItem('dover_submissions');
-    if (saved) setSubmissions(JSON.parse(saved));
-  }, []);
+  const mapRowToSubmission = (row: SubmissionRow): Submission => ({
+    id: row.id,
+    timestamp: row.data?.timestamp || Date.parse(row.created_at) || Date.now(),
+    userInfo: row.data?.userInfo || { name: "", tutor: "" },
+    groupRole: row.data?.groupRole || "",
+    partAResponse: row.data?.partAResponse || "",
+    allocation: row.data?.allocation || INITIAL_ALLOCATION,
+    partC: row.data?.partC || { aims: "", benefits: "", costs: "", decisionRule: "", evaluate: "" },
+    opportunityCost: row.data?.opportunityCost || { chooseMore: "", giveUp: "", explain: "" },
+    checklist: row.data?.checklist || { scarcity: false, choice: false, opportunityCost: false, framework: false, decision: false },
+    foodForThought: row.data?.foodForThought || { sourceLink: "", sourceFileName: "", resource: "", choices: "", stakeholders: "", cost: "", winners: "" }
+  });
+
+  const fetchSubmissions = async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from(SUBMISSIONS_TABLE)
+      .select("id, created_at, data")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    const rows = (data || []) as SubmissionRow[];
+    setSubmissions(rows.map(mapRowToSubmission));
+  };
 
   useEffect(() => {
     if (!supabase) return;
@@ -230,6 +255,14 @@ const DoverForestApp = () => {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!teacherAuthed) return;
+    fetchSubmissions().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      alert(`Unable to load submissions. ${message}`);
+    });
+  }, [teacherAuthed]);
 
   const openTeacherAuth = () => {
     setTeacherAuthError("");
@@ -291,13 +324,16 @@ const DoverForestApp = () => {
     }
   };
 
-  const saveSubmission = () => {
+  const saveSubmission = async () => {
+    if (!supabase) {
+      alert("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+      return;
+    }
     if (!userInfo.name || !userInfo.tutor) {
       alert("Please complete your profile (Name and Tutor) before submitting.");
       return;
     }
-    const newSubmission: Submission = {
-      id: Date.now().toString(),
+    const newSubmission = {
       timestamp: Date.now(),
       userInfo,
       groupRole,
@@ -308,10 +344,17 @@ const DoverForestApp = () => {
       checklist,
       foodForThought
     };
-    const updated = [newSubmission, ...submissions];
-    setSubmissions(updated);
-    localStorage.setItem('dover_submissions', JSON.stringify(updated));
-    alert("Response submitted successfully!");
+    try {
+      const { error } = await supabase.from(SUBMISSIONS_TABLE).insert({ data: newSubmission });
+      if (error) throw error;
+      alert("Response submitted successfully!");
+      if (teacherAuthed) {
+        await fetchSubmissions();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`Failed to submit response. ${message}`);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -321,18 +364,32 @@ const DoverForestApp = () => {
     }
   };
 
-  const deleteSubmission = (id: string) => {
-    const updated = submissions.filter(s => s.id !== id);
-    setSubmissions(updated);
-    localStorage.setItem('dover_submissions', JSON.stringify(updated));
-    if (selectedSubmission?.id === id) setSelectedSubmission(null);
+  const deleteSubmission = async (id: string) => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase.from(SUBMISSIONS_TABLE).delete().eq("id", id);
+      if (error) throw error;
+      const updated = submissions.filter(s => s.id !== id);
+      setSubmissions(updated);
+      if (selectedSubmission?.id === id) setSelectedSubmission(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`Failed to delete response. ${message}`);
+    }
   };
 
-  const clearAllSubmissions = () => {
+  const clearAllSubmissions = async () => {
+    if (!supabase) return;
     if (confirm("Are you sure you want to delete ALL responses?")) {
-      setSubmissions([]);
-      localStorage.removeItem('dover_submissions');
-      setSelectedSubmission(null);
+      try {
+        const { error } = await supabase.from(SUBMISSIONS_TABLE).delete().not("id", "is", null);
+        if (error) throw error;
+        setSubmissions([]);
+        setSelectedSubmission(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        alert(`Failed to clear responses. ${message}`);
+      }
     }
   };
 

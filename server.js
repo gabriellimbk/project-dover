@@ -3,7 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import dotenv from "dotenv";
-import { GoogleGenAI } from "@google/genai";
+import { generateTutorFeedback } from "./lib/tutor.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,54 +25,14 @@ app.post("/api/tutor", async (req, res) => {
     return res.status(400).json({ error: "Please write your answer before requesting feedback." });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: "Missing GEMINI_API_KEY on server." });
+    return res.status(500).json({ error: "Missing OPENAI_API_KEY on server." });
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    let specificInstruction = "";
-    let sentenceLimit = "";
-
-    if (fieldKey === "partA") {
-      sentenceLimit = "Limit your response to exactly 3 sentences.";
-      specificInstruction = `
-        Evaluate the student's answer based on the following: 
-        As long as the student covers 'unlimited wants' and 'limited resources' with the use of examples, it is a good answer. 
-        Provide encouraging feedback if they meet this. If they missed one, ask a socratic question to lead them to it.
-        Do not give the answer directly.
-      `;
-    } else {
-      sentenceLimit = "Limit your response to between 3 and 5 sentences.";
-      specificInstruction = `
-        Provide a rough hint or ask a probing question. 
-        Do not be overly detailed as this is an introductory course.
-        Context: ${promptContext}.
-      `;
-    }
-
-    const prompt = `
-      Role: Socratic Economics Tutor. Topic: Dover Forest.
-      Instruction: ${specificInstruction}
-      Student's Answer: "${studentAnswer}".
-      ${sentenceLimit}
-    `;
-
-    let result;
-    try {
-      result = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: prompt,
-      });
-    } catch (innerError) {
-      result = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      });
-    }
-
-    return res.json({ text: result.text || "Try expanding on your reasoning." });
+    const text = await generateTutorFeedback({ apiKey, fieldKey, promptContext, studentAnswer });
+    return res.json({ text });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return res.status(500).json({ error: message });
@@ -86,7 +46,7 @@ if (!isProd) {
     appType: "custom",
   });
   app.use(vite.middlewares);
-  app.use("*", async (req, res, next) => {
+  app.use(async (req, res, next) => {
     try {
       const url = req.originalUrl;
       const indexPath = path.resolve(__dirname, "index.html");
